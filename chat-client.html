@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat (Upgraded)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        /* Simple scrollbar styling */
+        #messages-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        #messages-list::-webkit-scrollbar-thumb {
+            background-color: #9ca3af; /* gray-400 */
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="font-sans bg-gray-100 text-gray-900">
+
+    <!-- Join Room Modal -->
+    <div id="join-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h2 class="text-2xl font-bold mb-4 text-center">Join Chat</h2>
+            <form id="join-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input type="text" id="username" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your name" required>
+                </div>
+                <div class="mb-6">
+                    <label for="room" class="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                    <input type="text" id="room" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Enter room name (e.g., 'general')" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150">
+                    Join
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Chat Application (Hidden by default) -->
+    <div id="chat-app" class="hidden h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-white shadow-md p-4 flex justify-between items-center z-10">
+            <h1 class="text-xl font-bold">Room: <span id="room-name" class="text-blue-600"></span></h1>
+            <button id="leave-btn" class="text-sm bg-red-500 text-white py-1 px-3 rounded-md hover:bg-red-600 transition">
+                Leave
+            </button>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            <!-- User List (Bonus: User Presence) -->
+            <aside class="w-48 sm:w-64 bg-gray-50 border-r border-gray-200 p-4 flex flex-col">
+                <h2 class="text-lg font-semibold mb-3">Users (<span id="user-count">0</span>)</h2>
+                <ul id="user-list" class="flex-1 overflow-y-auto space-y-2">
+                    <!-- User items will be injected here -->
+                </ul>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="flex-1 flex flex-col bg-white">
+                
+                <!-- Messages List -->
+                <div id="messages-list" class="flex-1 p-4 sm:p-6 space-y-4 overflow-y-auto">
+                    <!-- Messages will be injected here -->
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="h-6 px-4 sm:px-6 text-sm text-gray-500 italic">
+                    <!-- e.g., "User1 is typing..." -->
+                </div>
+
+                <!-- Message Input Form -->
+                <!-- NEW: Added position: relative to be the anchor for the emoji picker -->
+                <form id="message-form" class="bg-gray-50 p-4 sm:p-6 border-t border-gray-200 relative">
+                    
+                    <!-- NEW: Simple Emoji Picker -->
+                    <div id="emoji-picker" class="absolute bottom-20 left-4 bg-white border border-gray-300 rounded-lg shadow-lg p-2 grid grid-cols-5 gap-1 hidden z-20">
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">😀</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">😂</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">👍</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">❤️</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">🤔</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">🎉</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">🔥</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">🙏</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">😢</span>
+                        <span class="emoji-btn cursor-pointer text-2xl p-1 rounded hover:bg-gray-200">🤯</span>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <!-- NEW: Added id="emoji-toggle-btn" -->
+                        <button type="button" id="emoji-toggle-btn" class="text-gray-400 hover:text-gray-600 p-2" title="Pick an emoji">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                        <input type="text" id="message-input" class="flex-1 w-full px-4 py-2 border border-gray-300 rounded-full shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Type a message..." autocomplete="off">
+                        <button type="submit" class="bg-blue-600 text-white p-2 rounded-full shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150">
+                            <!-- Changed icon to a send plane -->
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
+                </form>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Connect to the Socket.IO server
+            const socket = io('http://localhost:3000');
+
+            // --- STATE ---
+            let currentUsername = '';
+            let currentRoom = '';
+            let typingTimer;
+            const TYPING_TIMER_LENGTH = 1500; // 1.5 seconds
+            
+            // --- Read Receipt Observer ---
+            let readReceiptObserver;
+
+            // --- DOM ELEMENTS ---
+            const joinModal = document.getElementById('join-modal');
+            const chatApp = document.getElementById('chat-app');
+            const joinForm = document.getElementById('join-form');
+            const usernameInput = document.getElementById('username');
+            const roomInput = document.getElementById('room');
+            const messageForm = document.getElementById('message-form');
+            const messageInput = document.getElementById('message-input');
+            const messagesList = document.getElementById('messages-list');
+            const roomNameEl = document.getElementById('room-name');
+            const userListEl = document.getElementById('user-list');
+            const userCountEl = document.getElementById('user-count');
+            const typingIndicatorEl = document.getElementById('typing-indicator');
+            const leaveBtn = document.getElementById('leave-btn');
+            
+            // --- NEW: EMOJI PICKER ELEMENTS ---
+            const emojiToggleBtn = document.getElementById('emoji-toggle-btn');
+            const emojiPicker = document.getElementById('emoji-picker');
+            const emojiBtns = document.querySelectorAll('.emoji-btn');
+
+            // --- Setup Intersection Observer for Read Receipts ---
+            function setupIntersectionObserver() {
+                const options = {
+                    root: messagesList, // Observe within the message list container
+                    threshold: 0.8      // Trigger when 80% of the message is visible
+                };
+
+                readReceiptObserver = new IntersectionObserver((entries, observer) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const msgEl = entry.target;
+                            const messageId = msgEl.dataset.messageId;
+                            
+                            // Emit that this message has been read
+                            socket.emit('message_read', { messageId });
+                            
+                            // Stop observing this message
+                            observer.unobserve(msgEl);
+                        }
+                    });
+                }, options);
+            }
+
+            // --- Update Read Receipt UI ---
+            function updateReadReceiptUI(messageId, readBy) {
+                const el = document.getElementById(`receipt-${messageId}`);
+                if (!el) return; // This receipt element doesn't exist (it's not my message)
+
+                const totalUsers = parseInt(userCountEl.textContent, 10);
+                const readByOthers = readBy.filter(u => u !== currentUsername);
+
+                // Reset colors
+                el.classList.remove('!text-green-400', '!text-gray-400');
+
+                if (totalUsers > 0 && readBy.length === totalUsers) {
+                    el.textContent = 'Read by all ✔✔';
+                    el.classList.add('!text-green-400'); // Use ! for Tailwind specificity
+                } else if (readByOthers.length > 0) {
+                    el.textContent = `Read by ${readByOthers.length} ✔`;
+                    el.classList.add('!text-gray-400');
+                } else {
+                    el.textContent = 'Delivered ✓';
+                }
+            }
+
+
+            // --- FUNCTIONS ---
+            
+            /**
+             * Appends a message to the chat window
+             * @param {Object} data - Message data
+             */
+            function addMessage(data) {
+                // Default 'readBy' to an empty array [] to prevent errors
+                const { id, username, message, timestamp, readBy = [], isSystem = false } = data;
+                
+                const msgEl = document.createElement('div');
+                
+                if (isSystem) {
+                    msgEl.className = 'text-center text-sm text-gray-500 italic';
+                    msgEl.textContent = message;
+                } else {
+                    const isMe = username === currentUsername;
+                    const time = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+                    msgEl.dataset.messageId = id;
+                    msgEl.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+                    msgEl.innerHTML = `
+                        <div class="max-w-xs md:max-w-md">
+                            <div class="flex items-baseline mb-1 ${isMe ? 'justify-end' : ''}">
+                                <span class="font-semibold text-sm ${isMe ? 'text-blue-600' : 'text-gray-800'}">${isMe ? 'You' : username}</span>
+                                <span class="text-xs text-gray-400 ml-2">${time}</span>
+                            </div>
+                            <div class="px-4 py-2 rounded-lg shadow ${isMe ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-900'}">
+                                <p class="break-words">${escapeHTML(message)}</p>
+                            </div>
+                        </div>
+                    `;
+
+                    // --- Add Read Receipt ---
+                    if (isMe) {
+                        const receiptEl = document.createElement('span');
+                        receiptEl.id = `receipt-${id}`;
+                        receiptEl.className = 'text-xs text-gray-400 mt-1 mr-1'; 
+                        msgEl.appendChild(receiptEl);
+                        updateReadReceiptUI(id, readBy);
+                    } 
+                    // --- Observe message if not from me and not read by me ---
+                    else if (!isMe && !readBy.includes(currentUsername)) {
+                        readReceiptObserver.observe(msgEl);
+                    }
+                }
+                messagesList.appendChild(msgEl);
+                scrollToBottom();
+            }
+
+            /**
+             * Scrolls the message list to the bottom
+             */
+            function scrollToBottom() {
+                messagesList.scrollTop = messagesList.scrollHeight;
+            }
+
+            /**
+             * Updates the user list UI
+             * @param {string[]} users - Array of usernames
+             */
+            function updateUserList(users) {
+                userListEl.innerHTML = '';
+                userCountEl.textContent = users.length;
+                users.sort(); // Sort alphabetically
+                users.forEach(user => {
+                    const li = document.createElement('li');
+                    li.className = 'text-gray-700 truncate flex items-center';
+                    li.innerHTML = `
+                        <span class="text-green-500 mr-2 text-xs">●</span>
+                        ${escapeHTML(user)} ${user === currentUsername ? '<span class="text-xs text-gray-500 ml-1">(You)</span>' : ''}
+                    `;
+                    userListEl.appendChild(li);
+                });
+            }
+
+            /**
+             * Updates the typing indicator UI
+             * @param {string[]} typingUsers - Array of usernames who are typing
+             */
+            function updateTypingIndicator(typingUsers) {
+                const othersTyping = typingUsers.filter(user => user !== currentUsername);
+                
+                if (othersTyping.length === 0) {
+                    typingIndicatorEl.textContent = '';
+                } else if (othersTyping.length === 1) {
+                    typingIndicatorEl.textContent = `${escapeHTML(othersTyping[0])} is typing...`;
+                } else {
+                    typingIndicatorEl.textContent = 'Several people are typing...';
+                }
+            }
+
+            /**
+             * Escapes HTML to prevent XSS
+             * @param {string} str - String to escape
+             */
+            function escapeHTML(str) {
+                return str.replace(/[&<>"']/g, function(m) {
+                    return {
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#039;'
+                    }[m];
+                });
+            }
+
+            // --- SOCKET EVENT EMITTERS ---
+
+            // Join Room
+            joinForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                currentUsername = usernameInput.value.trim();
+                currentRoom = roomInput.value.trim();
+
+                if (currentUsername && currentRoom) {
+                    socket.emit('join_room', { username: currentUsername, room: currentRoom });
+                    joinModal.classList.add('hidden');
+                    chatApp.classList.remove('hidden');
+                    roomNameEl.textContent = currentRoom;
+                    messageInput.focus();
+                }
+            });
+
+            // Send Message
+            messageForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const message = messageInput.value.trim();
+                if (message) {
+                    socket.emit('send_message', { message });
+                    messageInput.value = '';
+                    clearTimeout(typingTimer);
+                    socket.emit('stop_typing');
+                }
+            });
+
+            // Send Typing Event
+            messageInput.addEventListener('input', () => {
+                clearTimeout(typingTimer);
+                socket.emit('typing');
+                typingTimer = setTimeout(() => {
+                    socket.emit('stop_typing');
+                }, TYPING_TIMER_LENGTH);
+            });
+
+            // Leave Room
+            leaveBtn.addEventListener('click', () => {
+                window.location.reload();
+            });
+
+            // --- NEW: EMOJI PICKER LOGIC ---
+            
+            // Toggle picker
+            emojiToggleBtn.addEventListener('click', () => {
+                emojiPicker.classList.toggle('hidden');
+            });
+
+            // Add emoji to input
+            emojiBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    messageInput.value += btn.textContent;
+                    emojiPicker.classList.add('hidden');
+                    messageInput.focus();
+                });
+            });
+
+            // Hide picker when clicking outside
+            document.addEventListener('click', (e) => {
+                // If the click is outside the picker AND outside the toggle button
+                if (!emojiPicker.contains(e.target) && !emojiToggleBtn.contains(e.target)) {
+                    emojiPicker.classList.add('hidden');
+                }
+            });
+
+            // --- SOCKET EVENT HANDLERS ---
+
+            socket.on('connect_error', (err) => {
+                console.error('Connection Error:', err.message);
+                console.error('Could not connect to server. Please ensure it is running and accessible.');
+                joinModal.classList.remove('hidden');
+                chatApp.classList.add('hidden');
+            });
+
+            // Load message history when joining
+            socket.on('message_history', (messages) => {
+                messagesList.innerHTML = ''; // Clear list
+                addMessage({
+                    isSystem: true,
+                    message: `Welcome to the "${currentRoom}" room, ${currentUsername}!`
+                });
+                messages.forEach(msg => addMessage(msg));
+            });
+
+            // Receive new message
+            socket.on('receive_message', (data) => {
+                addMessage(data);
+            });
+
+            // Update user list
+            socket.on('user_list_update', (users) => {
+                updateUserList(users);
+            });
+
+            // Update typing indicator
+            socket.on('typing_broadcast', (typingUsers) => {
+                updateTypingIndicator(typingUsers);
+            });
+            
+            // Handle Read Receipt Updates
+            socket.on('message_read_update', ({ messageId, readBy }) => {
+                updateReadReceiptUI(messageId, readBy);
+            });
+
+            // Initialize observer on load
+            setupIntersectionObserver();
+        });
+    </script>
+</body>
+</html>
+
