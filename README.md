@@ -107,6 +107,7 @@ send_message	Send a message	{ message }
 typing	Notify typing started	–
 stopped_typing	Notify typing stopped	–
 message_read	Mark message as read	{ messageId, room }
+
 📥 Server-side Events
 Event	Description	Data
 room_joined	Confirmation after joining	{ user, room, messages, users }
@@ -115,6 +116,7 @@ user_list_update	Update user list	{ users }
 typing_broadcast	Typing indicator	{ username, isTyping }
 message_read_update	Update read status	{ messageId, username }
 system_message	System event (join/leave)	{ ...messageObject, isSystem: true }
+
 🧠 Future Enhancements
 
 🔒 Add user authentication (JWT / sessions)
@@ -127,7 +129,7 @@ system_message	System event (join/leave)	{ ...messageObject, isSystem: true }
 
 👨‍💻 Author
 
-Dev Gokha
+Dev Gokha    
 Web Developer | AI & ML Enthusiast
 📍 Gwalior,Madhya Pradesh, India
 🔗 GitHub Profile
